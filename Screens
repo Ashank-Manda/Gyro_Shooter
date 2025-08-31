@@ -1,0 +1,212 @@
+from cmu_graphics import *
+from motion_server import start_motion_server, playerConnected, playerRotation, playerStart
+import threading
+
+class Button: 
+    def __init__(self, cx, cy, width, height, label, fontSize):
+        self.cx = cx
+        self.cy = cy
+        self.width = width
+        self.height = height
+        self.label = label
+        self.fontSize = fontSize
+    
+    def drawButton(self, app):
+        drawImage(app.buttonUrl, self.cx - self.width//2, 
+                  self.cy - self.height//2, width=self.width, height=self.height)
+        drawLabel(self.label, self.cx, self.cy, font = "Orbitron", 
+                  size = self.fontSize, fill = "white")
+    def isClicked(self, mouseX, mouseY):
+        return ((self.cx - self.width//2 <= mouseX <= self.cx + self.width//2) and
+            (self.cy - self.height//2 <= mouseY <= self.cy + self.height//2))
+        
+        
+def onAppStart(app):
+    app.backgroundUrl = 'src/Sprites/Background.png'
+
+    #For Button Image
+    app.buttonUrl = 'src/Sprites/Button.png'
+
+    #For Starting of Game
+    app.startButton = Button(app.width//2, 3*app.height//4, 
+                             app.width//2, app.height//5, "Press To Start", 20)
+
+    reset(app)
+
+def reset(app):
+    app.screen = "Start"
+
+    #For connecting
+    app.spaceShipOptions = ['src/Sprites/SpaceShip.gif', 'src/Sprites/Scout.png']
+    app.chosenShipIndex1 = 1
+    app.chosenShipIndex2 = 0
+    app.movementDelay = 0
+
+    #Game Test (wont be used in game)
+    app.p1WinButton = Button(app.width//4, 3*app.height//4, 
+                        app.width//3, app.height//5, "P1", 20)
+    app.p2WinButton = Button(3*app.width//4, 3*app.height//4, 
+                        app.width//3, app.height//5, "P2", 20)
+    app.p1Wins = 0 
+    app.p2Wins = 0
+    app.p1Position = 100
+    app.p2Position = 100
+    app.p1FinalPosition = 100
+    app.p2FinalPosition = 100
+
+    #For GameBoard Screen
+    app.raceTrack = "src/Sprites/Racetrack.png"
+    app.showingWinsDelay = 100
+
+    # Start the motion server thread
+    threading.Thread(target=start_motion_server, daemon=True).start()
+    
+def onResize(app):
+    app.startButton = Button(app.width//2, 3*app.height//4, 
+                             app.width//2, app.height//5, "Press To Start", 20)
+    app.p1WinButton = Button(app.width//4, 3*app.height//4, 
+                        app.width//3, app.height//5, "P1", 20)
+    app.p2WinButton = Button(3*app.width//4, 3*app.height//4, 
+                        app.width//3, app.height//5, "P2", 20)
+
+def onStep(app):
+    #Changing Characters for Connecting Screen Based on Rotation
+    if app.screen == "Connecting":
+        app.movementDelay -=1
+        if playerRotation["p1"] > 6 and app.movementDelay < 0:
+            options = len(app.spaceShipOptions)
+            app.chosenShipIndex1 = (app.chosenShipIndex1 + 1) % options
+            app.movementDelay = 10
+        
+        if playerRotation["p2"] > 6  and app.movementDelay == 0:
+            options = len(app.spaceShipOptions)
+            app.chosenShipIndex2 = (app.chosenShipIndex1 + 1) % options
+            app.movementDelay = 10
+        
+        #Starting Game Based on Rotation
+        if playerStart["p1"] > 10:
+            app.screen = "Game"
+    
+    #Gameboard Player that Wins Moves Logic
+    if app.screen == "GameBoard":
+        app.showingWinsDelay -=1
+        if app.showingWinsDelay == 0:
+            app.showingWinsDelay = 100
+            app.screen = "Game"
+        if app.p1FinalPosition >= app.p1Position:
+            app.p1Position +=10
+        if app.p2FinalPosition >= app.p2Position:
+            app.p2Position +=10
+        if ((app.p1Position >= app.p1FinalPosition) and
+            (app.p2Position >= app.p2FinalPosition) and
+            (app.p1Wins == 3 or app.p2Wins == 3) and 
+            (app.showingWinsDelay == 100)): 
+                app.screen = "Winning"
+    
+    #Reset App
+    if app.screen == "Winning":
+        if playerStart["p1"] > 10:
+            reset(app)
+
+        
+    pass
+
+def redrawAll(app):
+    #draw background
+    if app.screen != "GameBoard":
+        drawImage(app.backgroundUrl, 0, 0, width=app.width, height=app.height)
+
+    #draw Start Screen
+    if app.screen == "Start":
+        app.startButton.drawButton(app)
+        drawLabel("GYRO SHOOTER", app.width//2, app.height//4, 
+                  align = "center", fill = "white", size = 30, font = "Orbitron")
+    
+    #draw Connecting Screen
+    if app.screen == "Connecting": 
+        #Spaceship Drawn Based on Chosen Index
+        drawImage(app.spaceShipOptions[app.chosenShipIndex1], app.width//4, 
+                  app.height//2, width=app.width//3, height = app.height//2, 
+                  align="center")
+        drawImage(app.spaceShipOptions[app.chosenShipIndex2], 3*app.width//4, 
+                  app.height//2, width=app.width//3, height = app.height//2, 
+                  align="center")
+        
+        drawLabel("PLAYER 1", app.width//4, app.height//4, 
+                  fill = "white", size = 20)
+        drawLabel("PLAYER 2", 3*app.width//4, app.height//4, 
+                  fill = "white", size = 20)
+        
+        #Shows if Each Player is Connected
+        if playerConnected["p1"] == True:
+            label1 = "Connected"
+        else: label1 = "Not Connected"
+        drawLabel(label1, app.width//4, 3*app.height//4, 
+                  fill = "white", size = 20)
+        
+        if playerConnected["p2"] == True:
+            label2 = "Connected"
+        else: label2 = "Not Connected"
+        drawLabel(label2, 3*app.width//4, 3*app.height//4,
+                  fill = "white", size = 20)
+        
+    if app.screen == "Game":
+        app.p1WinButton.drawButton(app)
+        app.p2WinButton.drawButton(app)
+        pass
+
+    #for Gameboard Screen
+    if app.screen == "GameBoard":
+        drawImage(app.raceTrack, 0, 0, width=app.width, height=app.height)
+        drawImage(app.spaceShipOptions[app.chosenShipIndex1], app.p1Position, 
+                  3*app.height//8, width=app.width//6, height = app.height//3, 
+                  align="center", rotateAngle = 90)
+        drawImage(app.spaceShipOptions[app.chosenShipIndex2], app.p2Position, 
+                  5*app.height//8, width=app.width//6, height = app.height//3, 
+                  align="center", rotateAngle = 90)
+    
+    #for Winning Screen
+    if app.screen == "Winning":
+        winner = "PLAYER 1" if app.p1Wins == 3 else "PLAYER 2"
+        drawLabel(f'{winner} WINS!!!', app.width//2, app.height//2, size = 100)
+
+def onKeyPress(app, key):
+
+    
+    pass
+
+def onKeyRelease(app, key):
+    pass
+
+def onMousePress(app, mouseX, mouseY):
+    #Start Button
+    if app.screen == "Start":
+        if app.startButton.isClicked(mouseX, mouseY):
+            app.screen = "Connecting"
+    
+    #For game screen wont be used
+    if app.screen == "Game":
+        if app.p1WinButton.isClicked(mouseX, mouseY):
+            app.p1Wins +=1
+            app.p1FinalPosition = ((app.width - 200) // 3) * app.p1Wins + 100
+            app.screen = "GameBoard"
+        if app.p2WinButton.isClicked(mouseX,mouseY): 
+            app.p2Wins += 1
+            app.p2FinalPosition = ((app.width - 200) // 3) * app.p2Wins + 100
+            app.screen = "GameBoard"
+    pass
+
+def onMouseRelease(app, mouseX, mouseY):
+    pass
+
+def onMouseDrag(app, mouseX, mouseY):
+    pass
+
+def onMouseMove(app, mouseX, mouseY):
+    pass
+
+def main():
+    runApp()
+
+main()
+
